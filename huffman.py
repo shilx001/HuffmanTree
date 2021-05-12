@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import tensorflow.contrib.slim as slim
+import datetime
 
 
 class Node:
@@ -38,16 +39,14 @@ class HuffmanTree:
         self.root_child_count = 0
         for i, t in enumerate(self.tree):
             t.item_id = id[i]
-        self.sess = tf.Session()
         self.tree_copy = self.tree.copy()
         self.buildTree()
         self.codebook = self.getCode()
-        self.input_state = tf.placeholder(dtype=tf.float32, shape=[None, self.max_seq_length, state_dim])
-        self.input_action = tf.placeholder(dtype=tf.int32, shape=[None, ])
-        self.input_action_prob = tf.placeholder(dtype=tf.float32, shape=[None, ])
+        self.input_state = tf.placeholder(dtype=tf.float32, shape=[1, self.max_seq_length, state_dim])
         self.input_state_length = tf.placeholder(dtype=tf.float32, shape=[None, ])
         self.input_reward = tf.placeholder(dtype=tf.float32, shape=[None, ])
         self.buildNetwork_v1()  # 构建网络
+        self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
     def buildTree(self):
@@ -153,7 +152,23 @@ class HuffmanTree:
         # 先根据action找到对应的path
         # 再根据path对路径进行遍历，计算总概率
         # 根据概率得出
-        pass
+        loss_list = []
+        for i in range(len(action)):
+            with tf.Session() as s:
+                #tf.reset_default_graph()
+                action_prob = self.getActionProb(action[i])
+                loss = -self.input_reward * tf.log(action_prob + 1e-13)
+                train_op = tf.train.AdamOptimizer(self.lr).minimize(loss)
+                # self.sess.run(tf.variables_initializer(tf.report_uninitialized_variables()))
+                s.run(tf.global_variables_initializer())
+                #self.sess.run(tf.variables_initializer([loss]))
+                _, l = s.run([train_op, loss],
+                                     feed_dict={
+                                         self.input_state: state[i].reshape([1, self.max_seq_length, self.state_dim]),
+                                         self.input_state_length: [state_length[i], ],
+                                         self.input_reward: [reward[i], ]})
+            loss_list.append(l)
+        return np.mean(loss_list)
 
     def getAction(self, state, state_length):
         # 根据输入的state和state_length得到一个动作的采样
@@ -186,9 +201,10 @@ class HuffmanTree:
         path = list(map(int, self.codebook[action].split()))
         node = self.tree
         action_prob = 1
-        for i in path:
-            action_prob *= node.network[path[i]]
-            node = node.child[i]
+        for i in range(len(path)):
+            t = node.network[:, path[i]]
+            action_prob *= node.network[:, path[i]]
+            node = node.child[path[i]]
         return action_prob
 
     def state_padding(self, input_state, input_state_length):
@@ -211,4 +227,12 @@ h_tree = HuffmanTree(value=frequency, id=id, branch=3, state_dim=10)
 state = np.random.rand(1, 32, 10)
 state_length = 10
 action = h_tree.getAction(state, [state_length])
+action_prob = h_tree.getActionProb(1)
+
+for i in range(100):
+    start = datetime.datetime.now()
+    loss = h_tree.learn(state, [state_length], [1], [10])
+    end = datetime.datetime.now()
+    print('Step {}\n loss:{} time:{}'.format(i,loss,(end-start).seconds))
+print('Training time:{}'.format((end - start).seconds))
 pass
