@@ -97,8 +97,10 @@ class HuffmanTree:
         '''
         with tf.variable_scope('feature_extract', reuse=tf.AUTO_REUSE):
             basic_cell = tf.contrib.rnn.GRUCell(num_units=self.hidden_size)
-            _, states = tf.nn.dynamic_rnn(basic_cell, input_state, dtype=tf.float32,
-                                          sequence_length=input_state_length)
+            _, states = tf.nn.dynamic_rnn(basic_cell, input_state, dtype=tf.float32,sequence_length=input_state_length)
+            #basic_cell = tf.contrib.rnn.BasicLSTMCell(num_units=self.hidden_size)
+            #_, states = tf.nn.dynamic_rnn(basic_cell, input_state, dtype=tf.float32, sequence_length=input_state_length)
+            #states = states[0]
         return states
 
     def feature_extract_atem(self, input_state, input_state_length):
@@ -195,6 +197,7 @@ class HuffmanTree:
         count = 0
         t_node = self.mlp(id=str(count), softmax_activation=False)
         t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.relu)
+        t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.relu)
         t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.softmax)
         networks = [t_node]
         while len(queue) > 0:
@@ -202,6 +205,7 @@ class HuffmanTree:
             if line != current_line:  # for parameter sharing
                 current_line = line
                 t_node = self.mlp(id=str(count), softmax_activation=False)
+                t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.relu)
                 t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.relu)
                 t_node = slim.fully_connected(t_node, num_outputs=self.branch, activation_fn=tf.nn.softmax)
                 networks.append(t_node)

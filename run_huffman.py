@@ -10,9 +10,9 @@ from funk_svd import SVD
 model_name = 'GRU'
 np.random.seed(1)
 tf.set_random_seed(1)
-#data = pd.read_csv('ratings.csv', header=0, names=['u_id', 'i_id', 'rating', 'timestep'])
+# data = pd.read_csv('ratings.csv', header=0, names=['u_id', 'i_id', 'rating', 'timestep'])
 data = pd.read_table('ratings.dat', sep='::', names=['u_id', 'i_id', 'rating', 'timestep'])
-#data=data[:100]
+# data=data[:100]
 
 user_idx = data['u_id'].unique()  # id for all the user
 np.random.shuffle(user_idx)
@@ -95,7 +95,7 @@ def one_hot_rating(input_rating):
 
 
 max_seq_length = 32
-state_dim = item_matrix.shape[1] + 1
+state_dim = item_matrix.shape[1] + 11
 hidden_size = 64
 
 agent = HuffmanTree(value=movie_count, id=list(range(len(movie_count))), state_dim=state_dim, branch=24,
@@ -120,11 +120,11 @@ for id1 in train_id:
     action = []
     for _, row in user_record.iterrows():
         movie_feature = get_feature(row['i_id'])
-        current_state = np.hstack((movie_feature.flatten(), (row['rating'])))
-        rating.append(row['rating'])
+        current_state = np.hstack((movie_feature.flatten(), one_hot_rating(row['rating'])))
+        rating.append((row['rating']))
         state.append(current_state)
         action.append(action_mapping(row['i_id']))
-        if len(rating) % 32 is 0:
+        if len(rating) % 32 == 0:
             state_list = []
             state_length_list = []
             action_list = []
@@ -176,7 +176,7 @@ def evaluate(recommend_id, item_id, rating, top_N):
         current_recommend_id = list(recommend_id[ti])[:top_N]
         current_item = item_id[ti]
         current_rating = rating[ti]
-        if current_rating > 3.5:
+        if current_rating > 3:
             relevant += 1
             if current_item in current_recommend_id:
                 recommend_relevant += 1
@@ -185,10 +185,12 @@ def evaluate(recommend_id, item_id, rating, top_N):
             output_reward += normalize(current_rating)
             rank = current_recommend_id.index(current_item)
             mrr += 1.0 / (rank + 1)
-    recall = recommend_relevant / relevant if relevant is not 0 else 0
-    precision = recommend_relevant / selected if selected is not 0 else 0
+    recall = recommend_relevant / relevant if relevant != 0 else 0
+    precision = recommend_relevant / selected if selected != 0 else 0
     return output_reward / session_length, precision, recall, mrr / session_length
 
+
+result_analysis = []
 
 for id1 in test_id:
     user_record = data[data['u_id'] == id1]
@@ -199,7 +201,7 @@ for id1 in test_id:
     all_rating = []
     for _, row in user_record.iterrows():
         movie_feature = get_feature(row['i_id'])
-        current_state = np.hstack((movie_feature.flatten(), (row['rating'])))
+        current_state = np.hstack((movie_feature.flatten(), one_hot_rating(row['rating'])))
         all_state.append(current_state)
         if len(all_state) > 1:
             count += 1
@@ -216,6 +218,7 @@ for id1 in test_id:
             all_rating.append(row['rating'])
     reward_10, precision_10, recall_10, mkk_10 = evaluate(all_recommend, all_item, all_rating, 10)
     reward_30, precision_30, recall_30, mkk_30 = evaluate(all_recommend, all_item, all_rating, 30)
+    result_analysis.append((all_recommend, all_item, all_rating))
     test_count += 1
     print('Test user #', test_count, '/', len(test_id))
     print('Reward@10: %.4f, Precision@10: %.4f, Recall@10: %.4f, MRR@10: %4f'
@@ -240,3 +243,4 @@ print('Result:')
 display = np.mean(np.array(result).reshape([-1, 8]), axis=0)
 for num in display:
     print('%.5f' % num)
+pickle.dump(result_analysis, open('huffman_analysis', mode='wb'))
